@@ -3,18 +3,19 @@
 (define convert-to-memory-representation
   (lambda (sexp memory mLength)
     (if (and (sexp-valid? sexp) (memory-valid? memory))
-        (allocate-sexp-to-memory sexp memory mLength)
+        (let ([newMemory (allocate-sexp-to-memory-iter sexp memory mLength)])
+          (list (- (list-ref newMemory 2) 1) (list-ref newMemory 1) (list-ref newMemory 2)))
         '()
     )
   )
 )
 
-(define allocate-sexp-to-memory
+(define allocate-sexp-to-memory-iter
   (lambda (sexp memory mLength)
     (cond [(atom? sexp) (list mLength (cons sexp memory) (+ mLength 1))]
-          [(pair? sexp) (let ([left-address (allocate-sexp-to-memory (car sexp) memory mLength)])
-                              (let ([right-address (allocate-sexp-to-memory (cdr sexp) (list-ref left-address 1) (list-ref left-address 2))])                          
-                                (list (- mLength 1)
+          [(pair? sexp) (let ([left-address (allocate-sexp-to-memory-iter (car sexp) memory mLength)])
+                              (let ([right-address (allocate-sexp-to-memory-iter (cdr sexp) (list-ref left-address 1) (list-ref left-address 2))])                          
+                                (list (cons (list-ref left-address 0) (list-ref right-address 0))
                                       (cons (cons (list-ref left-address 0) (list-ref right-address 0)) (list-ref right-address 1))
                                       (+ (list-ref right-address 2) (list-ref left-address 2))
                                 )
