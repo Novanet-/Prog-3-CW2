@@ -12,13 +12,14 @@
 (define allocate-sexp-to-memory
   (lambda (sexp memory mLength)
     (cond [(atom? sexp) (list mLength (cons sexp memory) (+ mLength 1))]
-          [(pair? sexp) (let ([left-address (allocate-sexp-to-memory (car sexp) memory mLength)]
-                              [right-address (allocate-sexp-to-memory (cdr sexp) memory mLength)])
-                          (list (cons (list-ref right-address 0) (list-ref left-address 0))
-                                (cons (list-ref right-address 1) (list-ref left-address 1))
-                                (+ (list-ref right-address 2) (list-ref left-address 2))
-                          )
-                         )
+          [(pair? sexp) (let ([left-address (allocate-sexp-to-memory (car sexp) memory mLength)])
+                              (let ([right-address (allocate-sexp-to-memory (cdr sexp) (list-ref left-address 1) (list-ref left-address 2))])                          
+                                (list (- mLength 1)
+                                      (cons (cons (list-ref left-address 0) (list-ref right-address 0)) (list-ref right-address 1))
+                                      (+ (list-ref right-address 2) (list-ref left-address 2))
+                                )
+                              )
+                        )
           ]          
     )                   
   )
