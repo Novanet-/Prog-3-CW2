@@ -45,6 +45,8 @@
                             l2
                             (mini-cons (mini-car l1) (mini-append (mini-cdr l1) l2))))))
 
+;;Checks that the length of the list of roots is less than or equal to the size of the memory
+;;Then calls a function to return the full list of reachable address
 (define tracer
   (lambda (roots memVector)
     (let ([memSize (vector-length memVector)])
@@ -56,24 +58,44 @@
   )
 )
 
+;;Checks that the current index being look at is within the bounds of the memory, if the accumulator has reached the end of the memory, return the list of rachable addresses
+;;Otherwise, check if the current address at the accumulator index is in the lsit of roots, and hasn't already been marked as reachable
+;;If so, then add the current address (and all sub-addresses if it's a pair) to the reachabile address list
+;;Otherwise, call this function again, increasing the accumulator by 1
 (define trace-roots
-  (lambda (roots memVector fullRootList memSize acc)
+  (lambda (roots memVector reachableList memSize acc)
     (if (>= acc memSize)
-        fullRootList
-        (if (memq acc roots)
-            (trace-roots roots memVector (cons (return-address memVector acc) fullRootList) memSize (+ acc 1))
-            (trace-roots roots memVector fullRootList memSize (+ acc 1))
+        reachableList
+        (if (and (memq acc roots) (not (memq acc reachableList)))
+            (trace-roots roots memVector (return-address memVector acc reachableList) memSize (+ acc 1))
+            (trace-roots roots memVector reachableList memSize (+ acc 1))
         )
     )
   )
 )
 
+;;If the memory element at the address is a string, then add the address of that element to the reachable list
+;;Otherwise, it is a pair, so call this function again with the left and right addresses of the pair
 (define return-address
-  (lambda (memVector index)
+  (lambda (memVector index reachableList)
           (if (string? (vector-ref memVector index))
-              index
-              (cons index (cons (return-address memVector (car (vector-ref memVector index))) (return-address memVector (cdr (vector-ref memVector index)))))
+              (cons index reachableList)
+              (cons index (cons (return-address memVector (left-address memVector index) reachableList)(cons (return-address memVector (right-address memVector index) reachableList) reachableList)))
           )
+  )
+)
+
+;;Returns the left address of a pair
+(define left-address
+  (lambda (memVector index)
+    (car (vector-ref memVector index))
+  )
+)
+
+;;Returns the right address of a pair
+(define right-address
+  (lambda (memVector index)
+    (cdr (vector-ref memVector index))
   )
 )
 
