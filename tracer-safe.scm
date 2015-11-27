@@ -80,7 +80,17 @@
   (lambda (memVector index reachableList)
           (if (string? (vector-ref memVector index))
               (cons index reachableList)
-              (cons index (append (return-address memVector (left-address memVector index) reachableList)(append (return-address memVector (right-address memVector index) reachableList) reachableList)))
+              (let ([left-pair-address (left-address memVector index)]
+                    [right-pair-address (right-address memVector index)]
+                    [left-cycle (right-address memVector index)]
+                    [right-cycle (right-address memVector index)]
+                   )
+                    (cond [(and left-cycle (not right-cycle)) (cons index (return-address memVector right-pair-address reachableList))]
+                          [(and right-cycle (not left-cycle)) (cons index (return-address memVector left-pair-address reachableList))]
+                          [(and left-cycle right-cycle) (cons index reachableList)]
+                          [else (cons index (return-address memVector left-pair-address (return-address memVector right-pair-address reachableList)))]
+                    )
+              )
           )
   )
 )
