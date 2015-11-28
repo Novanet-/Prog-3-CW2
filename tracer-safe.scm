@@ -50,9 +50,9 @@
 (define tracer
   (lambda (roots memVector)
     (let ([memSize (vector-length memVector)])
-      (if (<= (length roots) memSize)
+      (if (and (<= (length roots) memSize) (memVector-valid? memVector))
           (trace-roots roots memVector '() memSize  0)
-          '(1)
+          '()
       )
     )
   )
@@ -67,7 +67,7 @@
     (if (>= acc memSize)
         reachableList
         (if (and (memq acc roots) (not (memq acc reachableList)))
-            (trace-roots roots memVector (return-address memVector acc reachableList) memSize (+ acc 1))
+            (trace-roots roots memVector (return-address memVector acc reachableList '()) memSize (+ acc 1))
             (trace-roots roots memVector reachableList memSize (+ acc 1))
         )
     )
@@ -77,20 +77,30 @@
 ;;If the memory element at the address is a string, then add the address of that element to the reachable list
 ;;Otherwise, it is a pair, so call this function again with the left and right addresses of the pair
 (define return-address
-  (lambda (memVector index reachableList)
-          (if (string? (vector-ref memVector index))
-              (cons index reachableList)
-              (let ([left-pair-address (left-address memVector index)]
-                    [right-pair-address (right-address memVector index)]
-                    [left-cycle (right-address memVector index)]
-                    [right-cycle (right-address memVector index)]
-                   )
-                    (cond [(and left-cycle (not right-cycle)) (cons index (return-address memVector right-pair-address reachableList))]
-                          [(and right-cycle (not left-cycle)) (cons index (return-address memVector left-pair-address reachableList))]
-                          [(and left-cycle right-cycle) (cons index reachableList)]
-                          [else (cons index (return-address memVector left-pair-address (return-address memVector right-pair-address reachableList)))]
+  (lambda (memVector index reachableList seen)
+          (let ([currentElement (vector-ref memVector index)])
+          (if (not (memq index seen))
+              (if (string? currentElement)
+                  (cons index reachableList)              
+                  (let ([left-pair-address (left-address memVector index)]
+                        [right-pair-address (right-address memVector index)]
+                       )
+                       (let ([left-cycle (or (= left-pair-address index) (memq left-pair-address reachableList))]
+                             [right-cycle  (or (= right-pair-address index) (memq right-pair-address reachableList))]
+                             )                                
+                             (cond [(or (and left-cycle right-cycle) (and (memq left-pair-address seen) (memq right-pair-address seen)))  (cons index reachableList)]
+                                   [(or (and left-cycle (not right-cycle)) (memq left-pair-address seen) ) (cons index (return-address memVector right-pair-address reachableList (cons index seen)))]
+                                   [(or (and right-cycle (not left-cycle)) (memq right-pair-address seen) ) (cons index (return-address memVector left-pair-address reachableList (cons index seen)))]
+                                   [else (if (= left-pair-address right-pair-address)
+                                     (cons index (return-address memVector left-pair-address reachableList (cons index seen)))                                     
+                                     (cons index (return-address memVector left-pair-address (return-address memVector right-pair-address reachableList (cons index seen)) (cons index seen)))
+                                     )]
                     )
+                   )
               )
+          )
+          reachableList
+          )
           )
   )
 )
@@ -98,16 +108,58 @@
 ;;Returns the left address of a pair
 (define left-address
   (lambda (memVector index)
-    (car (vector-ref memVector index))
+    (let ([element (vector-ref memVector index)])
+      (car element)
+    )
   )
 )
 
 ;;Returns the right address of a pair
 (define right-address
   (lambda (memVector index)
-    (cdr (vector-ref memVector index))
+    (let ([element (vector-ref memVector index)])
+      (cdr element)
+    )
   )
 )
+
+
+(define sexp-valid?
+  (lambda (sexp)
+    (cond [(atom? sexp) (string? sexp)]
+          [(pair? sexp) (begin (number? (car sexp)) (number? (cdr sexp)))]
+          [else #f]
+    )
+  )
+)
+
+(define atom?
+  (lambda (x)
+    (and (not (pair? x)) (not (null? x)))))
+
+(define memVector-valid?
+  (lambda (memVector)
+    (let ([validityVector (vector-map sexp-valid? memVector)])
+     (only-contains-#t? (vector->list validityVector))
+    )
+  )
+)
+
+(define (boolean-true? x) (eq? x #t))
+
+(define (only-contains-#t? l)
+  (andmap boolean-true? l))
+    
+    
+
+
+
+
+
+
+
+
+
 
 (tracer '(0) (make-memory '("a")))
 ;(0)
@@ -198,3 +250,5 @@
 ;;; wrong address
 (tracer '(1) (make-memory '(1)))
 ;;***
+
+
