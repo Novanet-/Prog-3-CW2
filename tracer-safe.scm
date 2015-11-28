@@ -92,7 +92,7 @@
                                    [(or (and left-cycle (not right-cycle)) (memq left-pair-address seen) ) (cons index (return-address memVector right-pair-address reachableList (cons index seen)))]
                                    [(or (and right-cycle (not left-cycle)) (memq right-pair-address seen) ) (cons index (return-address memVector left-pair-address reachableList (cons index seen)))]
                                    [else (if (= left-pair-address right-pair-address)
-                                     (cons index (return-address memVector left-pair-address reachableList (cons index seen)))                                     
+                                     (cons index (return-address memVector left-pair-address reachableList (cons index seen)) index)                                     
                                      (cons index (return-address memVector left-pair-address (return-address memVector right-pair-address reachableList (cons index seen)) (cons index seen)))
                                      )]
                     )
