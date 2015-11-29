@@ -211,7 +211,7 @@
              [rootVector (list->vector roots)]
              [rootElements (elements-at-reachable-addresses rootVector memVector (vector-length rootVector) 0)]
              [reachableElements (elements-at-reachable-addresses reachableVector memVector (vector-length reachableVector) 0)])
-          rootElements
+          (get-mem (make-new-memory '() '() (list->vector rootElements) (length rootElements) 0))
     )
   )
 )
@@ -230,17 +230,21 @@
   )
 )
 
+
+;;Takes a vector of the root elements, and iterates through it, adding each root element (all all other elements it points to) to a new list of memory
+;;It returns a list, first argument is the new root addresses, second argument is the new memory list, third is the length of the new memory
 (define make-new-memory
-  (lambda (newMemory rootElements)
-    (if (null? rootElements)
-        '()
-        (letrec ([rootElement (car rootelements)]
-                 [addedElementRepresentation (convert-to-memory-representation element memory (length memory))]
+  (lambda (newRoots newMemory rootElements rootElementsLength acc)
+    (if (>= acc rootElementsLength)
+        (list newRoots newMemory (length newMemory))
+            (letrec ([rootElement (vector-ref rootElements acc)]
+                     [addedElementRepresentation (convert-to-memory-representation rootElement newMemory (length newMemory))]
+                    )
+            (make-new-memory (cons (get-sexp addedElementRepresentation) newRoots) (cons (get-mem addedElementRepresentation) newMemory) rootElements rootElementsLength (+ acc 1))
         )
-        (map cons 
-    )
     )
   )
+)
 
 (define assign-new-mem-position
   (lambda (element memory)
