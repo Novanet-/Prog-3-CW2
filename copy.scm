@@ -289,7 +289,7 @@
                      [addedElementRepresentation (convert-to-memory-representation (vector-ref rootElements acc) '() (length newMemory))]
                  )
               (if (memq (vector-ref rootElements acc) seenElements)
-                  (make-new-memory newRoots newMemory rootElements rootElementsLength (+ acc 1) seenElements)
+                  (make-new-memory (cons (get-sexp addedElementRepresentation) newRoots) newMemory rootElements rootElementsLength (+ acc 1) seenElements)
                   (make-new-memory (cons (get-sexp addedElementRepresentation) newRoots) (append (get-mem addedElementRepresentation) newMemory)
                              rootElements rootElementsLength (+ acc 1) (cons (vector-ref rootElements acc) seenElements))
               )
