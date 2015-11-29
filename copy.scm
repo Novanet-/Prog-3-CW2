@@ -1,5 +1,56 @@
 #lang scheme
 
+(define reachability-table
+  (lambda (l size)
+    (let ((table (make-vector size 0)))
+      (for-each (lambda (address)
+                  (if (and (number? address) 
+                           (< address size)
+                           (>= address 0))
+                      (vector-set! table address 1)
+                      (error 'reachability-table
+                             "not valid address"
+                             address)))
+                l)
+      table)))
+;;:marks 0
+;;---
+
+(define make-memory
+  (lambda (l)
+    (apply vector (reverse l))))
+;;:marks 0          
+;;---
+
+
+(begin
+  (define size 0)
+  (define mem '())
+  (define mini-null "null")  ;;; reserved symbol for end of list
+  (define mini-cons (lambda (x y)
+                      (let ((address size))
+                        (set! mem (cons (cons  x y) mem))
+                        (set! size (+ size 1))
+                        address)))
+  (define mini-quote (lambda (x)
+                       (let ((address size))
+                         (set! mem (cons x mem))
+                         (set! size (+ size 1))
+                         address)))
+  (define deref (lambda (x)
+                  (list-ref mem (- (- size 1) x))))
+  (define mini-null? (lambda (x)
+                       (eq? (deref x) mini-null)))
+  (define mini-car (lambda (x)
+                     (car (deref x))))
+  (define mini-cdr (lambda (x)
+                     (cdr (deref x))))
+  (define mini-append (lambda (l1 l2)
+                        (if (mini-null? l1)
+                            l2
+                            (mini-cons (mini-car l1) (mini-append (mini-cdr l1) l2))))))
+;;:marks 0
+
 (define convert-to-memory-representation
   (lambda (sexp memory mLength)
     (if (and (sexp-valid? sexp) (memory-valid? memory))
@@ -201,17 +252,14 @@
   )
 )
 
-(define make-memory
-  (lambda (l)
-    (apply vector (reverse l))))
 
-(define copy
+(define copy-memory
   (lambda (roots memVector)
     (letrec ([reachableVector (list->vector (tracer roots memVector))]
              [rootVector (list->vector roots)]
              [rootElements (elements-at-reachable-addresses rootVector memVector (vector-length rootVector) 0)]
              [reachableElements (elements-at-reachable-addresses reachableVector memVector (vector-length reachableVector) 0)])
-          (get-mem (make-new-memory '() '() (list->vector rootElements) (length rootElements) 0))
+          (make-new-memory '() '() (list->vector rootElements) (length rootElements) 0 '())
     )
   )
 )
@@ -234,14 +282,18 @@
 ;;Takes a vector of the root elements, and iterates through it, adding each root element (all all other elements it points to) to a new list of memory
 ;;It returns a list, first argument is the new root addresses, second argument is the new memory list, third is the length of the new memory
 (define make-new-memory
-  (lambda (newRoots newMemory rootElements rootElementsLength acc)
+  (lambda (newRoots newMemory rootElements rootElementsLength acc seenElements)
     (if (>= acc rootElementsLength)
         (list newRoots newMemory (length newMemory))
-            (letrec ([rootElement (vector-ref rootElements acc)]
-                     [addedElementRepresentation (convert-to-memory-representation rootElement newMemory (length newMemory))]
-                    )
-            (make-new-memory (cons (get-sexp addedElementRepresentation) newRoots) (cons (get-mem addedElementRepresentation) newMemory) rootElements rootElementsLength (+ acc 1))
-        )
+            (let (;;[rootElement (vector-ref rootElements acc)]
+                     [addedElementRepresentation (convert-to-memory-representation (vector-ref rootElements acc) '() (length newMemory))]
+                 )
+              (if (memq (vector-ref rootElements acc) seenElements)
+                  (make-new-memory newRoots newMemory rootElements rootElementsLength (+ acc 1) seenElements)
+                  (make-new-memory (cons (get-sexp addedElementRepresentation) newRoots) (append (get-mem addedElementRepresentation) newMemory)
+                             rootElements rootElementsLength (+ acc 1) (cons (vector-ref rootElements acc) seenElements))
+              )
+            )
     )
   )
 )
@@ -256,4 +308,107 @@
 
 ;;(copy '(0 1) (make-memory '((0 . 1) "y" "x")))
 ;;(copy '(2) (make-memory '("b" "a" (0 . 1) "y" "x")))
+
+(copy-memory '(0) (make-memory '("a")))
+;((0) ("a") 1)
+
+(copy-memory '(2) (make-memory '("a" "x" "y")))
+;((0) ("a") 1)
+
+(copy-memory '(1) (make-memory '("a" "x" "y")))
+;((0) ("x") 1)
+
+(copy-memory '(1 1) (make-memory '("a" "x" "y")))
+;((0 0) ("x") 1)
+
+(copy-memory '(1 2) (make-memory '("a" "x" "y")))
+;(or ((0 1) ("a" "x") 2)  ;;; this solution is dependent on the order of traversal
+;    ((1 0) ("x" "a") 2))
+    
+(copy-memory '(6) (make-memory '((2 . 5) (3 . 4) "b" "a" (0 . 1) "y" "x")))
+;:marks 0
+;((0) ("b" "a" (5 . 6) "y" "x" (2 . 3) (1 . 4)) 7) ;;; this solution is dependent on the order of traversal, so we don't give marks
+
+(copy-memory '(5) (make-memory '((2 . 5) (5 . 5) "b" "a" (0 . 1) "y" "x")))
+;$test-copy-cycle
+;((0) ((0 . 0)) 1)
+
+
+(copy-memory '(6) (make-memory '((6 . 5) (5 . 6) "b" "a" (0 . 1) "y" "x")))
+;$test-copy-cycle2
+;(or ((0) ((1 . 0) (0 . 1)) 2)
+;    ((1) ((1 . 0) (0 . 1)) 2))
+
+(copy-memory '(6) (make-memory '((2 . 2) (3 . 4) "b" "a" (0 . 1) "y" "x")))
+;;$test-copy-sharing ;;; this solution is dependent on the order of traversal
+;(or ((0) ("y" "x" (2 . 3) (1 . 1)) 4) 
+;    ((0) ("x" "y" (3 . 2) (1 . 1)) 4)
+ ;   ((0) ("x" (3 . 1) "y" (2 . 2)) 4)
+  ;  ((0) ("y" (1 . 3) "x" (2 . 2)) 4)
+  ;  ((0) ((1 . 2) "y" "x" (3 . 3)) 4)
+  ;  ((0) ((2 . 1) "x" "y" (3 . 3)) 4)
+
+;    ((1) ("y" "x" (0 . 0) (2 . 3)) 4) 
+;    ((1) ("x" "y" (0 . 0) (3 . 2)) 4)
+ ;   ((1) ("x" (3 . 0) (2 . 2) "y") 4)
+  ;  ((1) ("y" (0 . 3) (2 . 2) "x") 4)
+   ; ((1) ((0 . 2) "y" (3 . 3) "x") 4)
+    ;((1) ((2 . 0) "x" (3 . 3) "y") 4)
+    
+;    ((2) ("y" (0 . 0) "x" (1 . 3)) 4) 
+ ;   ((2) ("x" (0 . 0) "y" (3 . 1)) 4)
+  ;  ((2) ("x" (1 . 1) (3 . 0) "y") 4)
+   ; ((2) ("y" (1 . 1) (0 . 3) "x") 4)
+    ;((2) ((0 . 1) (3 . 3) "y" "x") 4)
+    ;((2) ((1 . 0) (3 . 3) "x" "y") 4)
+    
+;    ((3) ((0 . 0) "y" "x" (1 . 2)) 4) 
+ ;   ((3) ((0 . 0) "x" "y" (2 . 1)) 4)
+  ;  ((3) ((1 . 1) "x" (2 . 0) "y") 4)
+   ; ((3) ((1 . 1) "y" (0 . 2) "x") 4)
+    ;((3) ((2 . 2) (0 . 1) "y" "x") 4)
+    ;((3) ((2 . 2) (1 . 0) "x" "y") 4)
+    
+;)
+    
+(let* ((memory-list '((2 . 5) (3 . 4) "b" "a" (0 . 1) "y" "x"))
+       (triple (copy-memory '(6) (make-memory memory-list)))
+       (to-roots  (car triple))
+       (to-memory (cadr triple))
+       (to-size   (caddr triple)))
+  (reachability-table (tracer to-roots (make-memory to-memory)) (length to-memory)))
+;#(1 1 1 1 1 1 1)
+
+(let* ((memory-list '(hi foo (2 . 5) (3 . 4) "b" "a" (0 . 1) "y" "x"))
+       (triple (copy-memory '(6) (make-memory memory-list)))
+       (to-roots  (car triple))
+       (to-memory (cadr triple))
+       (to-size   (caddr triple)))
+  (reachability-table (tracer to-roots (make-memory to-memory)) (length to-memory)))
+;#(1 1 1 1 1 1 1)
+
+;;(instrument 'get 'set-cxr! '_)   ;;; check that there was no mutation
+;0
+
+;(instrument 'get 'set! '_)       ;;; check that there was no assignment
+;0           
+
+(let ((root (mini-append (mini-cons (mini-quote "a")
+                                    (mini-cons (mini-quote "b")
+                                               (mini-cons (mini-quote "c")
+                                                          (mini-cons (mini-quote "d")
+                                                                     (mini-quote mini-null)))))
+                         (mini-cons (mini-quote "z")
+                                    (mini-cons (mini-quote "y")
+                                               (mini-cons (mini-quote "x")
+                                                          (mini-cons (mini-quote "w")
+                                                                     (mini-quote mini-null))))))))
+;  (display (convert-from-memory root (make-memory mem))) (newline)
+  (display (make-memory mem))
+  (let* ((triple (copy-memory (list root) (make-memory mem)))
+         (to-roots  (car triple))
+         (to-memory (cadr triple))
+         (to-size   (caddr triple)))
+    (reachability-table (tracer to-roots (make-memory to-memory)) to-size)))
+;;#(1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1)
   
